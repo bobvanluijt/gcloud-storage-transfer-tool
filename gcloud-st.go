@@ -19,22 +19,34 @@ import (
 	storage "google.golang.org/api/storage/v1"
 )
 
+/**
+ * Set consts
+ */
 const (
 	// This scope allows the application full control over resources in Google Cloud Storage
 	scope = storage.DevstorageFullControlScope
 )
 
+/**
+ * Define variables
+ */
 var (
 	projectID  = flag.String("project", "", "Your cloud project ID.")
 	bucketName = flag.String("bucket", "", "The name of an existing bucket within your project.")
 	fileName   = flag.String("file", "", "The file to upload.")
-	dirName    = flag.String("dir", "", "The dir to upload.")
+	dirName	= flag.String("dir", "", "The dir to upload.")
 )
 
+/**
+ * Function for fatal logs
+ */
 func fatalf(service *storage.Service, errorMessage string, args ...interface{}) {
 	log.Fatalf("Dying with error:\n"+errorMessage, args...)
 }
 
+/**
+ * Insert a file in gcloud storage bucket
+ */
 func insertFile(service *storage.Service, fileName string) {
 	// Insert an object into a bucket.
 	object := &storage.Object{Name: fileName}
@@ -50,11 +62,18 @@ func insertFile(service *storage.Service, fileName string) {
 	}
 }
 
+/**
+ * Create a directory
+ */
 func createDir(path string){
 	fmt.Println("directory: ", path)
 }
 
+/**
+ * Main function
+ */
 func main() {
+	
 	flag.Parse()
 	if *bucketName == "" {
 		log.Fatalf("Bucket argument is required. See --help.")
@@ -95,44 +114,43 @@ func main() {
 		// upload single file
 		insertFile(service, *fileName)
 	} else if *dirName != "" {
-		// upload dir
 
+		// upload dir
 		filepath.Walk(*dirName, func(path string, fileInfo os.FileInfo, err error) error {
-	        //fmt.Printf("Visited: %s\n", path)
 			
 			// search hidden files, if the path contains /. it contains an hidden entity
 			isHidden := strings.Index(path, "/.")
-		    if isHidden > -1 || string(path[0]) == "." {
 
-		    	fmt.Println("Hidden files are not uploaded", path);
+			// if file is hidden, don't upload it
+			if isHidden > -1 || string(path[0]) == "." {
 
-		    } else {
+				fmt.Println("Hidden files are not uploaded", path);
+
+			} else {
 
 				f, err := os.Open(path)
 				if err != nil {
-			        log.Fatalf("Something went wrong looping through dirs %v", err)
-			    }
+					log.Fatalf("Something went wrong looping through dirs %v", err)
+				}
 
-			    defer f.Close()
-			    fi, err := f.Stat()
-			    if err != nil {
-			        log.Fatalf("Something went wrong looping through dirs %v", err)
-			    }
+				defer f.Close()
+				fi, err := f.Stat()
+				if err != nil {
+					log.Fatalf("Something went wrong looping through dirs %v", err)
+				}
 
-			    switch mode := fi.Mode(); {
-			    case mode.IsDir():
-			        // do directory stuff
-			        createDir(path)
-			    case mode.IsRegular():
-			        // do file stuff
-			        insertFile(service, path)
-			        //fmt.Println("file: %v", path)
-			    }
+				switch mode := fi.Mode(); {
+				case mode.IsDir():
+					// do directory stuff
+					createDir(path)
+				case mode.IsRegular():
+					// do file stuff
+					insertFile(service, path)
+					//fmt.Println("file: %v", path)
+				}
 
 			}
-
 			return nil
-	    })
+		})
 	}
-
 }

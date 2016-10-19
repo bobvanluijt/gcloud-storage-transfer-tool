@@ -8,12 +8,17 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"flag"
 	"fmt"
-	"strings"
-	"path/filepath"
+	"io"
 	"log"
 	"os"
+	"path/filepath"
+	// "reflect"
+	"strings"
+
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
 	storage "google.golang.org/api/storage/v1"
@@ -34,8 +39,9 @@ var (
 	projectID  = flag.String("project", "", "Your cloud project ID.")
 	bucketName = flag.String("bucket", "", "The name of an existing bucket within your project.")
 	fileName   = flag.String("file", "", "The file to upload.")
-	dirName	= flag.String("dir", "", "The dir to upload.")
-	public	= flag.String("public", "", "Make content public.")
+	dirName    = flag.String("dir", "", "The dir to upload.")
+	public     = flag.String("public", "", "Make content public.")
+	metaGzip   = flag.String("gzip", "", "Gzip the content and set the meta data to gzip")
 )
 
 /**
@@ -49,6 +55,9 @@ func fatalf(service *storage.Service, errorMessage string, args ...interface{}) 
  * Insert a file in gcloud storage bucket
  */
 func insertFile(service *storage.Service, fileName string) {
+
+	var fileToUpload io.Reader
+
 	// Insert an object into a bucket.
 	object := &storage.Object{Name: fileName}
 
@@ -56,12 +65,34 @@ func insertFile(service *storage.Service, fileName string) {
 	if err != nil {
 		fatalf(service, "Error opening %q: %v", fileName, err)
 	}
-	if res, err := service.Objects.Insert(*bucketName, object).Media(file).Do(); err == nil {
+	defer file.Close()
+
+	// Check if gzip should be applied, off by default
+	if *metaGzip == "true" {
+		var b = &bytes.Buffer{}
+		w := gzip.NewWriter(b)
+		if _, err := io.Copy(w, file); err != nil {
+			fatalf(service, "Error Copy %v", err)
+		}
+		if err := w.Flush(); err != nil {
+			fatalf(service, "Error Flush %v", err)
+		}
+		if err := w.Close(); err != nil {
+			fatalf(service, "Error Close %v", err)
+		}
+		fileToUpload = b
+	} else {
+		fileToUpload = file
+	}
+
+	// Check if file should be public, private by default
+	aclType := "private"
+	if *public == "true" {
+		aclType = "publicRead"
+	}
+
+	if res, err := service.Objects.Insert(*bucketName, object).Media(fileToUpload).PredefinedAcl(aclType).Do(); err == nil {
 		fmt.Println("Created object ", res.Name)
-
-		// if public, set public
-		service.Objects.Update(res.Name, ObjectAttrs{PredefinedACL: "publicRead"})
-
 	} else {
 		fatalf(service, "Objects.Insert failed: %v", err)
 	}
@@ -70,7 +101,7 @@ func insertFile(service *storage.Service, fileName string) {
 /**
  * Create a directory
  */
-func createDir(path string){
+func createDir(path string) {
 	fmt.Println("directory: ", path)
 }
 
@@ -78,7 +109,7 @@ func createDir(path string){
  * Main function
  */
 func main() {
-	
+
 	flag.Parse()
 	if *bucketName == "" {
 		log.Fatalf("Bucket argument is required. See --help.")
@@ -122,14 +153,14 @@ func main() {
 
 		// upload dir
 		filepath.Walk(*dirName, func(path string, fileInfo os.FileInfo, err error) error {
-			
+
 			// search hidden files, if the path contains /. it contains an hidden entity
 			isHidden := strings.Index(path, "/.")
 
 			// if file is hidden, don't upload it
 			if isHidden > -1 || string(path[0]) == "." {
 
-				fmt.Println("Hidden files are not uploaded", path);
+				fmt.Println("Hidden files are not uploaded", path)
 
 			} else {
 

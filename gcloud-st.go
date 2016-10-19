@@ -14,9 +14,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
-	// "reflect"
 	"strings"
 
 	"golang.org/x/net/context"
@@ -36,12 +36,14 @@ const (
  * Define variables
  */
 var (
-	projectID  = flag.String("project", "", "Your cloud project ID.")
-	bucketName = flag.String("bucket", "", "The name of an existing bucket within your project.")
-	fileName   = flag.String("file", "", "The file to upload.")
-	dirName    = flag.String("dir", "", "The dir to upload.")
-	public     = flag.String("public", "", "Make content public.")
-	metaGzip   = flag.String("gzip", "", "Gzip the content and set the meta data to gzip")
+	projectID   = flag.String("project", "", "Your cloud project ID.")
+	bucketName  = flag.String("bucket", "", "The name of an existing bucket within your project.")
+	fileName    = flag.String("file", "", "The file to upload.")
+	dirName     = flag.String("dir", "", "The dir to upload.")
+	public      = flag.String("public", "", "Make content public.")
+	metaGzip    = flag.String("gzip", "", "Gzip the content and set the meta data to gzip")
+	quite       = flag.String("quite", "", "Shows debug information")
+	allowHidden = flag.String("allowHidden", "", "Allow hidden files to be uploaded")
 )
 
 /**
@@ -52,14 +54,48 @@ func fatalf(service *storage.Service, errorMessage string, args ...interface{}) 
 }
 
 /**
+ * Show debug info
+ */
+func showDebugInfo(info string) {
+	if *quite != "true" {
+		fmt.Println("DEBUG", info)
+	}
+}
+
+/**
+ * Find the contenttype of a file
+ */
+func contentTypeFinder(fileName string) string {
+	// collect and set metadata of file
+	fileMeta, err := os.Open(fileName)
+	if err != nil {
+		panic(err)
+	}
+	defer fileMeta.Close()
+
+	// Only the first 512 bytes are used to sniff the content type.
+	buffer := make([]byte, 512)
+	_, err = fileMeta.Read(buffer)
+	if err != nil {
+		panic(err)
+	}
+
+	// Reset the read pointer if necessary.
+	fileMeta.Seek(0, 0)
+
+	// Always returns a valid content-type and "application/octet-stream" if no others seemed to match.
+	contentType := http.DetectContentType(buffer)
+
+	return contentType
+}
+
+/**
  * Insert a file in gcloud storage bucket
  */
 func insertFile(service *storage.Service, fileName string) {
 
 	var fileToUpload io.Reader
-
-	// Insert an object into a bucket.
-	object := &storage.Object{Name: fileName}
+	var object *storage.Object
 
 	file, err := os.Open(fileName)
 	if err != nil {
@@ -69,8 +105,8 @@ func insertFile(service *storage.Service, fileName string) {
 
 	// Check if gzip should be applied, off by default
 	if *metaGzip == "true" {
-		var b = &bytes.Buffer{}
-		w := gzip.NewWriter(b)
+		var byteBuffer = &bytes.Buffer{}
+		w := gzip.NewWriter(byteBuffer)
 		if _, err := io.Copy(w, file); err != nil {
 			fatalf(service, "Error Copy %v", err)
 		}
@@ -80,9 +116,16 @@ func insertFile(service *storage.Service, fileName string) {
 		if err := w.Close(); err != nil {
 			fatalf(service, "Error Close %v", err)
 		}
-		fileToUpload = b
+		fileToUpload = byteBuffer
+
+		// set the object with gzip encoding
+		object = &storage.Object{Name: fileName, ContentEncoding: "gzip", ContentType: contentTypeFinder(fileName)}
+
 	} else {
 		fileToUpload = file
+
+		// set the object without encoding, the filetype will be set automatically
+		object = &storage.Object{Name: fileName}
 	}
 
 	// Check if file should be public, private by default
@@ -91,8 +134,9 @@ func insertFile(service *storage.Service, fileName string) {
 		aclType = "publicRead"
 	}
 
+	// Execute the upload
 	if res, err := service.Objects.Insert(*bucketName, object).Media(fileToUpload).PredefinedAcl(aclType).Do(); err == nil {
-		fmt.Println("Created object ", res.Name)
+		showDebugInfo("Created object " + res.Name)
 	} else {
 		fatalf(service, "Objects.Insert failed: %v", err)
 	}
@@ -102,7 +146,7 @@ func insertFile(service *storage.Service, fileName string) {
  * Create a directory
  */
 func createDir(path string) {
-	fmt.Println("directory: ", path)
+	showDebugInfo("directory: " + path)
 }
 
 /**
@@ -135,11 +179,11 @@ func main() {
 
 	// If the bucket already exists and the user has access, warn the user, but don't try to create it.
 	if _, err := service.Buckets.Get(*bucketName).Do(); err == nil {
-		fmt.Printf("Bucket %s exists. Use it to add data", *bucketName)
+		showDebugInfo("Bucket %s exists. Use it to add data" + *bucketName)
 	} else {
 		// Create a bucket.
 		if res, err := service.Buckets.Insert(*projectID, &storage.Bucket{Name: *bucketName}).Do(); err == nil {
-			fmt.Printf("Created bucket %v at location %v\n\n", res.Name, res.SelfLink)
+			showDebugInfo("Created bucket " + res.Name + " at location %v\n\n" + res.SelfLink)
 		} else {
 			fatalf(service, "Failed creating bucket %s: %v", *bucketName, err)
 		}
@@ -158,9 +202,9 @@ func main() {
 			isHidden := strings.Index(path, "/.")
 
 			// if file is hidden, don't upload it
-			if isHidden > -1 || string(path[0]) == "." {
+			if isHidden > -1 || string(path[0]) == "." && *allowHidden != "true" {
 
-				fmt.Println("Hidden files are not uploaded", path)
+				showDebugInfo("Hidden files are not uploaded" + path)
 
 			} else {
 
@@ -182,7 +226,6 @@ func main() {
 				case mode.IsRegular():
 					// do file stuff
 					insertFile(service, path)
-					//fmt.Println("file: %v", path)
 				}
 
 			}

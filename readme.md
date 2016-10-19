@@ -15,7 +15,6 @@ _Note: still working on this. Watch the repo to see when it is done_
 
 You can use:
 
-|-----------------|-------------------------------------------------------------------------|
 | Argument        | Description                                                             |
 |-----------------|-------------------------------------------------------------------------|
 | `--project`     | Project id (mandatory)                                                  |
@@ -27,7 +26,6 @@ You can use:
 | `--watch`       | If set, updated dir or file will re-upload                              |
 | `--quite`       | If set, only errors will be shown                                       |
 | `--allowHidden` | If set, hidden files will be uploaded too                               |
-|-----------------|-------------------------------------------------------------------------|
 
 _Note: `--dir-` or `--file` is mandatory_
 

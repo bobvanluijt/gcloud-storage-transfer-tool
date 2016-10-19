@@ -15,19 +15,17 @@ _Note: still working on this. Watch the repo to see when it is done_
 
 You can use:
 
-|-----------------|-------------------------------------------------------------------------|
 | Argument        | Description                                                             |
 |-----------------|-------------------------------------------------------------------------|
 | `--project`     | Project id (mandatory)                                                  |
 | `--bucket`      | Bucket id (mandatory)                                                   |
 | `--dir`         | Set the dir that needs to be uploaded                                   |
 | `--file`        | Set the file that needs to be uploaded                                  |
-| `--public`      | If true, content will be public (ie. for website)                       |
-| `--gzip`        | If true, content will be gziped and content header will be set correctly|
-| `--watch`       | If true, updated dir or file will re-upload                             |
-| `--quite`       | If true, only errors will be shown                                      |
-| `--allowHidden` | If true, hidden files will be uploaded too                              |
-|-----------------|-------------------------------------------------------------------------|
+| `--public`      | If set, content will be public (ie. for website)                        |
+| `--gzip`        | If set, content will be gziped and content header will be set correctly |
+| `--watch`       | If set, updated dir or file will re-upload                              |
+| `--quite`       | If set, only errors will be shown                                       |
+| `--allowHidden` | If set, hidden files will be uploaded too                               |
 
 _Note: `--dir-` or `--file` is mandatory_
 

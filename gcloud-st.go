@@ -35,6 +35,7 @@ var (
 	bucketName = flag.String("bucket", "", "The name of an existing bucket within your project.")
 	fileName   = flag.String("file", "", "The file to upload.")
 	dirName	= flag.String("dir", "", "The dir to upload.")
+	public	= flag.String("public", "", "Make content public.")
 )
 
 /**
@@ -57,6 +58,10 @@ func insertFile(service *storage.Service, fileName string) {
 	}
 	if res, err := service.Objects.Insert(*bucketName, object).Media(file).Do(); err == nil {
 		fmt.Println("Created object ", res.Name)
+
+		// if public, set public
+		service.Objects.Update(res.Name, ObjectAttrs{PredefinedACL: "publicRead"})
+
 	} else {
 		fatalf(service, "Objects.Insert failed: %v", err)
 	}

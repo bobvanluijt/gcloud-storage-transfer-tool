@@ -5,11 +5,12 @@ _Note: still working on this. Watch the repo to see when it is done_
 
 ## Install
 
-### Install the compiled version
-...
+1. Make sure you have [Google gcloud installed](https://cloud.google.com/sdk/gcloud/).
+2. You can use the file in the `./bin` to run directly or (if you have Go installed) use `go run gcloud-st.go [arguments]`
 
-### Use Go directly
-...
+## Example:
+
+`$ ./gcloud --project=my-project --bucket=test-bucket-abc-123 --dir=./ --gzip=true --public=true --quite=true --watch=true`
 
 ## Usage with build version
 

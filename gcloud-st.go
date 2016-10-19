@@ -18,6 +18,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/fsnotify/fsnotify"
 
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
@@ -44,6 +47,7 @@ var (
 	metaGzip    = flag.String("gzip", "", "Gzip the content and set the meta data to gzip")
 	quite       = flag.String("quite", "", "Shows debug information")
 	allowHidden = flag.String("allowHidden", "", "Allow hidden files to be uploaded")
+	watch       = flag.String("watch", "", "Watches updates in directories")
 )
 
 /**
@@ -87,6 +91,42 @@ func contentTypeFinder(fileName string) string {
 	contentType := http.DetectContentType(buffer)
 
 	return contentType
+}
+
+/**
+ * Create a watcher on this dir
+ */
+func watcher(path string, client *http.Client, service *storage.Service) {
+
+	showDebugInfo("Watcher set for: " + path)
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer watcher.Close()
+
+	done := make(chan bool)
+	go func() {
+		for {
+			select {
+			case event := <-watcher.Events:
+				if event.Op&fsnotify.Write == fsnotify.Write {
+					showDebugInfo("modified file:" + event.Name)
+				}
+				// reprocess the uploads
+				processUploads(client, service)
+			case err := <-watcher.Errors:
+				panic(err)
+			}
+		}
+	}()
+
+	err = watcher.Add(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	<-done
 }
 
 /**
@@ -143,40 +183,9 @@ func insertFile(service *storage.Service, fileName string) {
 }
 
 /**
- * Create a directory
+ *
  */
-func createDir(path string) {
-	showDebugInfo("directory: " + path)
-}
-
-/**
- * Main function
- */
-func main() {
-
-	flag.Parse()
-	if *bucketName == "" {
-		log.Fatalf("Bucket argument is required. See --help.")
-	}
-	if *projectID == "" {
-		log.Fatalf("Project argument is required. See --help.")
-	}
-	if *fileName == "" && *dirName == "" {
-		log.Fatalf("You need to add to file or dir argument. See --help.")
-	}
-
-	// Authentication is provided by the gcloud tool when running locally, and
-	// by the associated service account when running on Compute Engine.
-	client, err := google.DefaultClient(context.Background(), scope)
-	if err != nil {
-		log.Fatalf("Unable to get default client: %v", err)
-	}
-
-	service, err := storage.New(client)
-	if err != nil {
-		log.Fatalf("Unable to create storage service: %v", err)
-	}
-
+func processUploads(client *http.Client, service *storage.Service) {
 	// If the bucket already exists and the user has access, warn the user, but don't try to create it.
 	if _, err := service.Buckets.Get(*bucketName).Do(); err == nil {
 		showDebugInfo("Bucket %s exists. Use it to add data" + *bucketName)
@@ -231,5 +240,52 @@ func main() {
 			}
 			return nil
 		})
+
+	}
+
+	fmt.Println("DONE", time.Now())
+
+}
+
+/**
+ * Create a directory
+ */
+func createDir(path string) {
+	showDebugInfo("directory: " + path)
+}
+
+/**
+ * Main function
+ */
+func main() {
+
+	flag.Parse()
+	if *bucketName == "" {
+		log.Fatalf("Bucket argument is required. See --help.")
+	}
+	if *projectID == "" {
+		log.Fatalf("Project argument is required. See --help.")
+	}
+	if *fileName == "" && *dirName == "" {
+		log.Fatalf("You need to add to file or dir argument. See --help.")
+	}
+
+	// Authentication is provided by the gcloud tool when running locally, and
+	// by the associated service account when running on Compute Engine.
+	client, err := google.DefaultClient(context.Background(), scope)
+	if err != nil {
+		log.Fatalf("Unable to get default client: %v", err)
+	}
+
+	service, err := storage.New(client)
+	if err != nil {
+		log.Fatalf("Unable to create storage service: %v", err)
+	}
+
+	processUploads(client, service)
+
+	// set a watcher for this dir
+	if *watch == "true" {
+		watcher(*dirName, client, service)
 	}
 }
